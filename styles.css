@@ -79,6 +79,7 @@ header img.logo {
   text-decoration: none;
   transition: background-color 0.3s ease;
   white-space: nowrap;
+  gap: 2rem;
 }
 
 .registration-button a:hover {
