@@ -3,7 +3,8 @@ let currentLang = 'pl';
 document.getElementById('language-flag').addEventListener('click', () => {
 currentLang = currentLang === 'pl' ? 'en' : 'pl';
 
-document.getElementById('language-flag').src = currentLang === 'pl' ? 'flags/gb.png' : 'flags/pl.png';
+const flag = document.getElementById('language-flag');
+flag.src = flag.getAttribute('src').replace(/(gb|pl)\.png$/, currentLang === 'pl' ? 'gb.png' : 'pl.png');
 document.getElementById('language-flag').alt = currentLang === 'pl' ? 'English' : 'Polski';
 
 document.querySelectorAll('[data-pl][data-en]').forEach(el => {
