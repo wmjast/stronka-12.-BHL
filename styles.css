@@ -61,13 +61,6 @@ header img.logo {
     transition: transform 0.2s ease;
 }
 
-.registration-button {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 3rem;
-}
-
 .registration-button a {
   display: inline-block;
   background-color: #2a9fdc;
@@ -79,6 +72,10 @@ header img.logo {
   text-decoration: none;
   transition: background-color 0.3s ease;
   white-space: nowrap;
+}
+
+.registration-button a + a {
+  margin-left: 2rem;
 }
 
 .registration-button a:hover {
