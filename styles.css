@@ -61,6 +61,13 @@ header img.logo {
     transition: transform 0.2s ease;
 }
 
+.registration-button {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+}
+
 .registration-button a {
   display: inline-block;
   background-color: #2a9fdc;
