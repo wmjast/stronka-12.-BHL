@@ -504,7 +504,24 @@ async function buyCart() {
 
 // ---------- Start ----------
 
+// Zapasowa ikona koszyka (biały wózek w SVG), gdy brak pliku icons/cart_icon.png
+const CART_ICON_FALLBACK = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>' +
+  '<path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>');
+
+function initCartIcon() {
+  const icon = document.getElementById('cart-icon');
+  if (!icon) return;
+  const useFallback = () => { icon.onerror = null; icon.src = CART_ICON_FALLBACK; };
+  // Obrazek mógł się nie wczytać jeszcze przed uruchomieniem skryptu
+  if (icon.complete && icon.naturalWidth === 0) useFallback();
+  else icon.onerror = useFallback;
+}
+
 function initShop() {
+  initCartIcon();
   buildCartModal();
   updateBadge();
 

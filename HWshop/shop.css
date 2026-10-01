@@ -323,11 +323,13 @@
   text-align: center;
   font-weight: 700;
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .cart-qty input::-webkit-outer-spin-button,
 .cart-qty input::-webkit-inner-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
 

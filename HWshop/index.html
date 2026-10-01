@@ -18,7 +18,7 @@
   <link rel="icon" href="logo/bhl_logo_black.png" type="image/png" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css?v=3">
-  <link rel="stylesheet" href="HWshop/shop.css?v=1">
+  <link rel="stylesheet" href="HWshop/shop.css?v=2">
 </head>
 <body>
   <header>
@@ -41,6 +41,10 @@
       <div class="registration-button">
         <a href="https://forms.office.com/Pages/ResponsePage.aspx?id=nCJQO3jNiEWbz5e3Yp4vD7_ReZyk1Z9IlrUG9ZN9IqZUMEVIODlaSTUzUExIOFhGTk1JTUtLU0dRMy4u" target="_blank" data-en="Register!" data-pl="Zapisz się!">Zapisz się!</a>
         <a href="/HWshop/" data-en="HW Shop" data-pl="Sklep HW">Sklep HW</a>
+        <a href="#" id="cart-button" class="cart-button" title="Koszyk" aria-label="Koszyk">
+          <img src="icons/cart_icon.png" alt="Koszyk" id="cart-icon">          
+          <span id="cart-count" class="cart-count" hidden>0</span>
+        </a>
       </div>
       <div class="language-switcher">
         <img src="flags/gb.png" alt="English" id="language-flag" />
@@ -50,6 +54,7 @@
 
   <section class="section shop-section" id="sklep">
     <h2 data-en="HW Shop" data-pl="Sklep HW">Sklep HW</h2>
+    <!-- Kafelki produktów generuje scripts/shop.js na podstawie excela -->
     <div id="shop-products">
       <p class="shop-status" data-pl="Wczytywanie produktów…" data-en="Loading products…">Wczytywanie produktów…</p>
     </div>
@@ -57,7 +62,6 @@
 
 <script src="scripts/script.js"></script>
 <script src="scripts/translator.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="scripts/shop.js?v=1"></script>
+<script src="scripts/shop.js?v=3"></script>
  </body>
 </html>
