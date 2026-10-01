@@ -18,6 +18,7 @@
   <link rel="icon" href="logo/bhl_logo_black.png" type="image/png" />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="HWshop/shop.css?v=1">
 </head>
 <body>
   <header>
@@ -46,7 +47,17 @@
       </div>
     </div>
   </header>
+
+  <section class="section shop-section" id="sklep">
+    <h2 data-en="HW Shop" data-pl="Sklep HW">Sklep HW</h2>
+    <div id="shop-products">
+      <p class="shop-status" data-pl="Wczytywanie produktów…" data-en="Loading products…">Wczytywanie produktów…</p>
+    </div>
+  </section>
+
 <script src="scripts/script.js"></script>
 <script src="scripts/translator.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="scripts/shop.js?v=1"></script>
  </body>
 </html>
