@@ -1,33 +1,91 @@
-// ===== Sklep HW – odczyt produktów bezpośrednio z pliku Excel =====
-// Wymaga biblioteki SheetJS (xlsx.full.min.js) załadowanej przed tym skryptem.
+// ===== Sklep HW – kafelki produktów, koszyk i zakupy =====
+// Dane pochodzą z excela przez HWshop/api.php (sam plik excela jest zablokowany,
+// bo zawiera kody drużyn).
 
-// Ścieżka do excela (względem <base href="/">)
-const SHOP_XLSX_PATH = 'HWshop/productList/SklepHW_old_custom.xlsx';
+// Adres API (względem <base href="/">)
+const SHOP_API = 'HWshop/api.php';
 
 // Folder ze zdjęciami – plik nazywamy numerem Lp., np. 5.jpg, 43.1.png
 const SHOP_PHOTO_DIR = 'HWshop/productPhotos/';
 const SHOP_PHOTO_EXT = ['jpg', 'png', 'webp'];
 const SHOP_PHOTO_FALLBACK = SHOP_PHOTO_DIR + 'cegla-removebg-preview.png';
 
-// Co ile ms odświeżać dane z excela (0 = bez odświeżania)
+// Co ile ms odświeżać dane (0 = bez odświeżania)
 const SHOP_REFRESH_MS = 30000;
 
-// Układ arkusza: wiersz 3 to nagłówki, produkty od wiersza 4 (indeksy od 0)
-const SHOP_FIRST_ROW = 3;
-const COL = { lp: 0, name: 1, left: 3, start: 4, limit: 5, price: 6 };
+// Klucze w pamięci przeglądarki
+const CART_KEY = 'bhlShopCart';
+const TEAM_KEY = 'bhlShopTeam';
 
-const shopLabels = {
-  pl: { available: 'Dostępne', limit: 'Limit / drużyna', price: 'Cena', none: 'Brak produktów do wyświetlenia.', error: 'Nie udało się wczytać listy produktów.' },
-  en: { available: 'Available', limit: 'Limit / team', price: 'Price', none: 'No products to display.', error: 'Could not load the product list.' }
+const T = {
+  pl: {
+    general: 'Ogólne', available: 'Dostępne', limit: 'Limit / drużyna', price: 'Cena',
+    addToCart: 'Dodaj do koszyka', added: 'Dodano ✓',
+    none: 'Brak produktów do wyświetlenia.', loadError: 'Nie udało się wczytać listy produktów.',
+    cart: 'Koszyk', teamName: 'Nazwa drużyny', teamCode: 'Kod drużyny',
+    teamOk: 'Drużyna zweryfikowana', teamChecking: 'Sprawdzanie drużyny…',
+    teamNeeded: 'Wpisz nazwę i kod drużyny, aby dokonać zakupu.',
+    empty: 'Koszyk jest pusty.', total: 'Razem', tokensLeft: 'Żetony drużyny',
+    buy: 'Kup', buying: 'Kupowanie…', remove: 'Usuń',
+    success: 'Zakup zrealizowany! Wydano: ', bought: 'kupiono już',
+    gone: 'Produkt niedostępny', notBuyable: 'Produktu nie można kupić',
+    stock: 'Dostępnych sztuk: ', limitTxt: 'Limit: ',
+    tooExpensive: 'Za mało żetonów',
+    err: {
+      bad_team: 'Nie ma drużyny o takiej nazwie.', bad_code: 'Nieprawidłowy kod drużyny.',
+      items: 'Nie można kupić niektórych produktów – sprawdź pozycje na czerwono.',
+      tokens: 'Drużyna nie ma wystarczającej liczby żetonów.', empty: 'Koszyk jest pusty.',
+      changed: 'Lista produktów się zmieniła – odśwież stronę.', network: 'Błąd połączenia z serwerem.'
+    }
+  },
+  en: {
+    general: 'General', available: 'Available', limit: 'Limit / team', price: 'Price',
+    addToCart: 'Add to cart', added: 'Added ✓',
+    none: 'No products to display.', loadError: 'Could not load the product list.',
+    cart: 'Cart', teamName: 'Team name', teamCode: 'Team code',
+    teamOk: 'Team verified', teamChecking: 'Checking team…',
+    teamNeeded: 'Enter your team name and code to make a purchase.',
+    empty: 'Your cart is empty.', total: 'Total', tokensLeft: 'Team tokens',
+    buy: 'Buy', buying: 'Buying…', remove: 'Remove',
+    success: 'Purchase complete! Spent: ', bought: 'already bought',
+    gone: 'Product unavailable', notBuyable: 'This product cannot be bought',
+    stock: 'In stock: ', limitTxt: 'Limit: ',
+    tooExpensive: 'Not enough tokens',
+    err: {
+      bad_team: 'No team with this name.', bad_code: 'Wrong team code.',
+      items: 'Some products cannot be bought – check the items in red.',
+      tokens: 'Your team does not have enough tokens.', empty: 'Your cart is empty.',
+      changed: 'The product list has changed – refresh the page.', network: 'Server connection error.'
+    }
+  }
 };
+
+// ---------- Stan ----------
+
+let products = [];          // lista z API
+let byRow = {};             // wiersz excela -> produkt
+let teamNames = [];
+let cart = loadJson(CART_KEY, {});   // wiersz -> ilość
+let team = { verified: false, name: '', tokens: 0, bought: {} };
+let serverProblems = {};    // błędy pozycji zwrócone przez serwer przy zakupie
+let lastShopState = '';
+const photoCache = {};
 
 // currentLang pochodzi z translator.js
 function shopLang() {
   return (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'en' : 'pl';
 }
+function t(key) { return T[shopLang()][key]; }
 
-function isEmpty(v) {
-  return v === undefined || v === null || String(v).trim() === '';
+function loadJson(key, def) {
+  try { return JSON.parse(localStorage.getItem(key)) || def; } catch (e) { return def; }
+}
+function saveJson(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* brak pamięci – trudno */ }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // Odmiana słowa „żeton” (1 żeton, 2 żetony, 5 żetonów)
@@ -38,43 +96,26 @@ function tokenWord(n, lang) {
   if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 'żetony';
   return 'żetonów';
 }
-
-// Zamiana wierszy arkusza na listę produktów pogrupowanych w kategorie
-function parseProducts(rows) {
-  const groups = [];
-  let current = { name: null, items: [] };
-  groups.push(current);
-
-  for (let r = SHOP_FIRST_ROW; r < rows.length; r++) {
-    const row = rows[r] || [];
-    const lp = row[COL.lp];
-    const name = row[COL.name];
-
-    // Wiersz z samą nazwą w kolumnie A (np. "PŁYTKI") = nowa kategoria
-    if (!isEmpty(lp) && isEmpty(name) && isNaN(Number(lp))) {
-      current = { name: String(lp).trim(), items: [] };
-      groups.push(current);
-      continue;
-    }
-    if (isEmpty(name)) continue;
-
-    // "Pozostało" bierzemy z wyliczonej formuły; awaryjnie = "Było na początku"
-    let left = Number(row[COL.left]);
-    if (isEmpty(row[COL.left]) || isNaN(left)) left = Number(row[COL.start]) || 0;
-
-    current.items.push({
-      lp: String(lp).trim(),
-      name: String(name).replace(/\s*\n\s*/g, ' ').trim(),
-      left: left,
-      limit: isEmpty(row[COL.limit]) ? '—' : row[COL.limit],
-      price: isEmpty(row[COL.price]) ? null : Number(row[COL.price])
-    });
-  }
-  return groups.filter(g => g.items.length > 0);
+function tokens(n, lang = shopLang()) {
+  return `${n} ${tokenWord(n, lang)}`;
 }
 
-// Zapamiętane adresy zdjęć (Lp. -> url), żeby przy odświeżaniu nie szukać ich od nowa
-const photoCache = {};
+async function api(action, body) {
+  const opts = body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' }
+    : { cache: 'no-store' };
+  const res = await fetch(`${SHOP_API}?action=${action}&t=${Date.now()}`, opts);
+  let data;
+  try { data = await res.json(); } catch (e) { throw { error: 'network', message: 'HTTP ' + res.status }; }
+  if (!data.ok) throw data;
+  return data;
+}
+
+function errText(e) {
+  return T[shopLang()].err[e && e.error] || (e && e.message) || T[shopLang()].err.network;
+}
+
+// ---------- Zdjęcia ----------
 
 function photoUrl(lp, extIdx) {
   return SHOP_PHOTO_DIR + encodeURIComponent(lp) + '.' + SHOP_PHOTO_EXT[extIdx];
@@ -97,16 +138,17 @@ function photoLoaded(img) {
   if (!img.src.endsWith(SHOP_PHOTO_FALLBACK)) photoCache[img.dataset.lp] = img.getAttribute('src');
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// ---------- Kafelki ----------
+
+function isActive(p) {
+  return p.buyable && p.left > 0;
 }
 
 function productCard(p, lang) {
-  const L = shopLabels[lang];
-  const priceEn = p.price === null || isNaN(p.price) ? '—' : `${p.price} ${tokenWord(p.price, 'en')}`;
-  const pricePl = p.price === null || isNaN(p.price) ? '—' : `${p.price} ${tokenWord(p.price, 'pl')}`;
-  const priceTxt = lang === 'en' ? priceEn : pricePl;
-  const soldOut =p.left <= 0 ? ' sold-out' : '';
+  const L = T[lang];
+  const price = p.price === null ? '—' : tokens(p.price, lang);
+  const priceAttr = p.price === null ? 'data-pl="—" data-en="—"' : `data-pl="${tokens(p.price, 'pl')}" data-en="${tokens(p.price, 'en')}"`;
+  const soldOut = p.left <= 0 ? ' sold-out' : '';
 
   return `
     <div class="card product-card${soldOut}">
@@ -118,63 +160,387 @@ function productCard(p, lang) {
       <h3 class="product-name">${escapeHtml(p.name)}</h3>
       <div class="product-stats">
         <div class="stat stat-available">
-          <span class="stat-label" data-pl="${shopLabels.pl.available}" data-en="${shopLabels.en.available}">${L.available}</span>
+          <span class="stat-label" data-pl="${T.pl.available}" data-en="${T.en.available}">${L.available}</span>
           <span class="stat-value">${p.left}</span>
         </div>
         <div class="stat stat-limit">
-          <span class="stat-label" data-pl="${shopLabels.pl.limit}" data-en="${shopLabels.en.limit}">${L.limit}</span>
-          <span class="stat-value">${escapeHtml(p.limit)}</span>
+          <span class="stat-label" data-pl="${T.pl.limit}" data-en="${T.en.limit}">${L.limit}</span>
+          <span class="stat-value">${escapeHtml(p.limit === null ? '—' : p.limit)}</span>
         </div>
       </div>
       <div class="product-price">
-        <span data-pl="${shopLabels.pl.price}" data-en="${shopLabels.en.price}">${L.price}</span>:
-        <strong data-pl="${pricePl}" data-en="${priceEn}">${priceTxt}</strong>
+        <span data-pl="${T.pl.price}" data-en="${T.en.price}">${L.price}</span>:
+        <strong ${priceAttr}>${price}</strong>
       </div>
+      ${isActive(p) ? `<button type="button" class="add-to-cart" data-row="${p.row}"
+          data-pl="${T.pl.addToCart}" data-en="${T.en.addToCart}">${L.addToCart}</button>` : ''}
     </div>`;
 }
 
-// Ostatnio wyrenderowany stan – przerysowujemy tylko, gdy dane się zmieniły
-let lastShopState = '';
-
-function renderShop(groups) {
+function renderShop(force) {
   const lang = shopLang();
   const box = document.getElementById('shop-products');
 
-  const state = lang + JSON.stringify(groups);
-  if (state === lastShopState) return;
+  const state = lang + JSON.stringify(products);
+  if (!force && state === lastShopState) return;
   lastShopState = state;
 
-  if (!groups.length) {
-    box.innerHTML = `<p class="shop-status" data-pl="${shopLabels.pl.none}" data-en="${shopLabels.en.none}">${shopLabels[lang].none}</p>`;
+  if (!products.length) {
+    box.innerHTML = `<p class="shop-status">${t('none')}</p>`;
     return;
   }
 
+  // Grupowanie wg kategorii; produkty bez kategorii (na początku arkusza) trafiają do „Ogólne”
+  const groups = [];
+  products.forEach(p => {
+    const last = groups[groups.length - 1];
+    if (!last || last.name !== p.category) groups.push({ name: p.category, items: [p] });
+    else last.items.push(p);
+  });
+
   box.innerHTML = groups.map(g => `
-    ${g.name ? `<h3 class="shop-category">${escapeHtml(g.name)}</h3>` : ''}
+    <h3 class="shop-category" ${g.name === null ? `data-pl="${T.pl.general}" data-en="${T.en.general}"` : ''}>
+      ${escapeHtml(g.name === null ? t('general') : g.name)}</h3>
     <div class="category-cards product-cards">
       ${g.items.map(p => productCard(p, lang)).join('')}
     </div>`).join('');
 }
 
-async function loadShop() {
+async function loadProducts() {
   const box = document.getElementById('shop-products');
   try {
-    // no-store + znacznik czasu, żeby zawsze brać najnowszą wersję pliku
-    const res = await fetch(`${SHOP_XLSX_PATH}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const wb = XLSX.read(await res.arrayBuffer(), { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
-    renderShop(parseProducts(rows));
+    const data = await api('products');
+    applyProducts(data.products);
+    teamNames = data.teams || [];
+    fillTeamList();
   } catch (err) {
     console.error('Sklep HW:', err);
-    // Przy błędzie odświeżenia zostawiamy stare kafelki, jeśli już są
     if (!box.querySelector('.product-card')) {
-      const lang = shopLang();
-      box.innerHTML = `<p class="shop-status" data-pl="${shopLabels.pl.error}" data-en="${shopLabels.en.error}">${shopLabels[lang].error}</p>`;
+      box.innerHTML = `<p class="shop-status">${t('loadError')}</p>
+        <p class="shop-status">(${escapeHtml(err.message || err)})</p>`;
     }
   }
 }
 
-loadShop();
-if (SHOP_REFRESH_MS > 0) setInterval(loadShop, SHOP_REFRESH_MS);
+function applyProducts(list) {
+  products = list || [];
+  byRow = {};
+  products.forEach(p => { byRow[p.row] = p; });
+  renderShop();
+  if (cartIsOpen()) renderCart();
+}
+
+// ---------- Koszyk: dane ----------
+
+function cartCount() {
+  return Object.values(cart).reduce((a, b) => a + b, 0);
+}
+
+function setQty(row, qty) {
+  qty = Math.max(0, Math.floor(Number(qty) || 0));
+  if (qty === 0) delete cart[row];
+  else cart[row] = qty;
+  delete serverProblems[row];
+  saveJson(CART_KEY, cart);
+  updateBadge();
+  if (cartIsOpen()) renderCart();
+}
+
+function addToCart(row) {
+  setQty(row, (cart[row] || 0) + 1);
+}
+
+function updateBadge() {
+  const badge = document.getElementById('cart-count');
+  if (!badge) return;
+  const n = cartCount();
+  badge.textContent = n;
+  badge.hidden = n === 0;
+}
+
+// Czy drużyna może kupić daną ilość? Zwraca { ok, reason }
+function lineStatus(row, qty) {
+  const p = byRow[row];
+  const L = T[shopLang()];
+  if (!p) return { ok: false, reason: L.gone };
+  if (!p.buyable) return { ok: false, reason: L.notBuyable };
+  if (qty > p.left) return { ok: false, reason: L.stock + p.left };
+  const already = team.verified ? (team.bought[row] || 0) : 0;
+  if (already + qty > p.limit) {
+    return { ok: false, reason: L.limitTxt + p.limit + (already ? `, ${L.bought}: ${already}` : '') };
+  }
+  if (serverProblems[row]) return { ok: false, reason: L.err.items };
+  return { ok: true, reason: '' };
+}
+
+function cartTotal() {
+  return Object.entries(cart).reduce((sum, [row, qty]) => {
+    const p = byRow[row];
+    return sum + (p && p.price ? p.price * qty : 0);
+  }, 0);
+}
+
+// ---------- Koszyk: okno ----------
+
+function buildCartModal() {
+  const L = T[shopLang()];
+  const el = document.createElement('div');
+  el.id = 'cart-overlay';
+  el.className = 'cart-overlay';
+  el.hidden = true;
+  el.innerHTML = `
+    <div class="cart-modal" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+      <div class="cart-head">
+        <h3 id="cart-title" data-pl="${T.pl.cart}" data-en="${T.en.cart}">${L.cart}</h3>
+        <button type="button" class="cart-close" aria-label="Zamknij">&times;</button>
+      </div>
+
+      <div class="cart-team">
+        <label>
+          <span data-pl="${T.pl.teamName}" data-en="${T.en.teamName}">${L.teamName}</span>
+          <input type="text" id="cart-team-name" list="cart-team-list" autocomplete="off">
+        </label>
+        <datalist id="cart-team-list"></datalist>
+        <label>
+          <span data-pl="${T.pl.teamCode}" data-en="${T.en.teamCode}">${L.teamCode}</span>
+          <input type="password" id="cart-team-code" autocomplete="off">
+        </label>
+      </div>
+      <p id="cart-team-status" class="cart-team-status"></p>
+
+      <div id="cart-items" class="cart-items"></div>
+
+      <div class="cart-summary">
+        <div><span data-pl="${T.pl.total}" data-en="${T.en.total}">${L.total}</span>: <strong id="cart-total"></strong></div>
+        <div id="cart-tokens-row" hidden><span data-pl="${T.pl.tokensLeft}" data-en="${T.en.tokensLeft}">${L.tokensLeft}</span>: <strong id="cart-tokens"></strong></div>
+      </div>
+
+      <p id="cart-message" class="cart-message"></p>
+      <button type="button" id="cart-buy" class="cart-buy" data-pl="${T.pl.buy}" data-en="${T.en.buy}">${L.buy}</button>
+    </div>`;
+  document.body.appendChild(el);
+
+  // Zamykanie: krzyżyk, kliknięcie w tło, Esc
+  el.addEventListener('click', e => {
+    if (e.target === el || e.target.closest('.cart-close')) closeCart();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && cartIsOpen()) closeCart();
+  });
+
+  // Zmiany ilości w koszyku
+  el.querySelector('#cart-items').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const row = btn.dataset.row;
+    const q = cart[row] || 0;
+    if (btn.dataset.act === 'inc') setQty(row, q + 1);
+    if (btn.dataset.act === 'dec') setQty(row, q - 1);
+    if (btn.dataset.act === 'del') setQty(row, 0);
+  });
+  el.querySelector('#cart-items').addEventListener('change', e => {
+    if (e.target.matches('input[data-row]')) setQty(e.target.dataset.row, e.target.value);
+  });
+
+  // Dane drużyny – weryfikacja chwilę po wpisaniu
+  const nameIn = el.querySelector('#cart-team-name');
+  const codeIn = el.querySelector('#cart-team-code');
+  nameIn.value = loadJson(TEAM_KEY, '');
+  let timer;
+  const onTeamInput = () => {
+    team = { verified: false, name: '', tokens: 0, bought: {} };
+    serverProblems = {};
+    setMessage('');
+    saveJson(TEAM_KEY, nameIn.value.trim());
+    clearTimeout(timer);
+    timer = setTimeout(verifyTeam, 600);
+    renderCart();
+  };
+  nameIn.addEventListener('input', onTeamInput);
+  codeIn.addEventListener('input', onTeamInput);
+
+  el.querySelector('#cart-buy').addEventListener('click', buyCart);
+}
+
+function fillTeamList() {
+  const list = document.getElementById('cart-team-list');
+  if (list) list.innerHTML = teamNames.map(n => `<option value="${escapeHtml(n)}">`).join('');
+}
+
+function cartIsOpen() {
+  const el = document.getElementById('cart-overlay');
+  return el && !el.hidden;
+}
+
+function openCart() {
+  document.getElementById('cart-overlay').hidden = false;
+  document.body.style.overflow = 'hidden';
+  setMessage('');
+  renderCart();
+  verifyTeam();
+}
+
+function closeCart() {
+  document.getElementById('cart-overlay').hidden = true;
+  document.body.style.overflow = '';
+}
+
+function setMessage(text, kind) {
+  const m = document.getElementById('cart-message');
+  if (!m) return;
+  m.textContent = text;
+  m.className = 'cart-message' + (kind ? ' ' + kind : '');
+}
+
+function setTeamStatus(text, kind) {
+  const s = document.getElementById('cart-team-status');
+  s.textContent = text;
+  s.className = 'cart-team-status' + (kind ? ' ' + kind : '');
+}
+
+async function verifyTeam(silent) {
+  const name = document.getElementById('cart-team-name').value.trim();
+  const code = document.getElementById('cart-team-code').value.trim();
+  if (!name || !code) {
+    setTeamStatus(t('teamNeeded'), '');
+    return;
+  }
+  if (!silent) setTeamStatus(t('teamChecking'), '');
+  try {
+    const data = await api('team', { team: name, code: code });
+    // Ktoś zdążył zmienić pola w trakcie sprawdzania
+    if (name !== document.getElementById('cart-team-name').value.trim()
+        || code !== document.getElementById('cart-team-code').value.trim()) return;
+    team = { verified: true, name: data.team, tokens: data.tokens, bought: data.bought || {} };
+    setTeamStatus(`${t('teamOk')}: ${data.team}`, 'ok');
+  } catch (e) {
+    team = { verified: false, name: '', tokens: 0, bought: {} };
+    setTeamStatus(errText(e), 'bad');
+  }
+  renderCart();
+}
+
+function renderCart() {
+  const L = T[shopLang()];
+  const box = document.getElementById('cart-items');
+  const rows = Object.keys(cart);
+
+  if (!rows.length) {
+    box.innerHTML = `<p class="cart-empty">${L.empty}</p>`;
+  } else {
+    box.innerHTML = rows.map(row => {
+      const qty = cart[row];
+      const p = byRow[row];
+      const st = lineStatus(row, qty);
+      const lineTotal = p && p.price !== null ? tokens(p.price * qty) : '—';
+      return `
+        <div class="cart-line ${st.ok ? 'ok' : 'bad'}">
+          <div class="cart-line-name">
+            ${escapeHtml(p ? p.name : L.gone)}
+            ${st.reason ? `<small>${escapeHtml(st.reason)}</small>` : ''}
+          </div>
+          <div class="cart-qty">
+            <button type="button" data-act="dec" data-row="${row}" aria-label="−">−</button>
+            <input type="number" min="0" step="1" value="${qty}" data-row="${row}">
+            <button type="button" data-act="inc" data-row="${row}" aria-label="+">+</button>
+          </div>
+          <div class="cart-line-total">${lineTotal}</div>
+          <button type="button" class="cart-del" data-act="del" data-row="${row}" title="${L.remove}" aria-label="${L.remove}">&times;</button>
+        </div>`;
+    }).join('');
+  }
+
+  // Podsumowanie
+  const total = cartTotal();
+  const totalEl = document.getElementById('cart-total');
+  totalEl.textContent = tokens(total);
+  const tooExpensive = team.verified && total > team.tokens;
+  totalEl.className = team.verified ? (tooExpensive ? 'bad' : 'ok') : '';
+
+  document.getElementById('cart-tokens-row').hidden = !team.verified;
+  document.getElementById('cart-tokens').textContent = team.verified ? tokens(team.tokens) : '';
+
+  const allOk = rows.length > 0 && rows.every(r => lineStatus(r, cart[r]).ok);
+  const buyBtn = document.getElementById('cart-buy');
+  buyBtn.disabled = !(team.verified && allOk && !tooExpensive);
+  if (tooExpensive && !document.getElementById('cart-message').textContent) {
+    setMessage(L.tooExpensive, 'bad');
+  } else if (!tooExpensive && document.getElementById('cart-message').textContent === L.tooExpensive) {
+    setMessage('');
+  }
+}
+
+async function buyCart() {
+  const buyBtn = document.getElementById('cart-buy');
+  const name = document.getElementById('cart-team-name').value.trim();
+  const code = document.getElementById('cart-team-code').value.trim();
+  const items = Object.entries(cart).map(([row, qty]) => ({
+    row: Number(row), name: byRow[row] ? byRow[row].name : '', qty: qty
+  }));
+
+  buyBtn.disabled = true;
+  buyBtn.textContent = t('buying');
+  setMessage('');
+  try {
+    const data = await api('buy', { team: name, code: code, items: items });
+    team = { verified: true, name: data.team, tokens: data.tokens, bought: data.bought || {} };
+    cart = {};
+    serverProblems = {};
+    saveJson(CART_KEY, cart);
+    updateBadge();
+    applyProducts(data.products);
+    setMessage(t('success') + tokens(data.total), 'ok');
+  } catch (e) {
+    serverProblems = (e && e.problems) || {};
+    setMessage(errText(e), 'bad');
+    // Odświeżenie danych – mogły się zmienić w międzyczasie
+    await loadProducts();
+    await verifyTeam();
+  } finally {
+    buyBtn.textContent = t('buy');
+    renderCart();
+  }
+}
+
+// ---------- Start ----------
+
+function initShop() {
+  buildCartModal();
+  updateBadge();
+
+  const cartBtn = document.getElementById('cart-button');
+  if (cartBtn) cartBtn.addEventListener('click', e => { e.preventDefault(); openCart(); });
+
+  // Przyciski „Dodaj do koszyka” na kafelkach
+  document.getElementById('shop-products').addEventListener('click', e => {
+    const btn = e.target.closest('.add-to-cart');
+    if (!btn) return;
+    addToCart(btn.dataset.row);
+    btn.textContent = t('added');
+    btn.classList.add('added');
+    setTimeout(() => {
+      btn.textContent = t('addToCart');
+      btn.classList.remove('added');
+    }, 1000);
+  });
+
+  // Po zmianie języka (translator.js) przerysowujemy elementy generowane dynamicznie
+  const flag = document.getElementById('language-flag');
+  if (flag) flag.addEventListener('click', () => {
+    renderShop(true);
+    if (cartIsOpen()) {
+      renderCart();
+      verifyTeam();
+    }
+  });
+
+  loadProducts();
+  if (SHOP_REFRESH_MS > 0) {
+    setInterval(() => {
+      loadProducts();
+      if (cartIsOpen() && team.verified) verifyTeam(true);
+    }, SHOP_REFRESH_MS);
+  }
+}
+
+initShop();
