@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# wymuszenie HTTPS
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteRule ^(.*)$ https://besthackingleague.pl/$1 [R=301,L]
+
+# www -> bez www
+RewriteCond %{HTTP_HOST} ^www\. [NC]
+RewriteRule ^(.*)$ https://besthackingleague.pl/$1 [R=301,L]
