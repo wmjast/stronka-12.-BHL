@@ -732,6 +732,30 @@ a img.org-photo:hover {
   transition: all 0.3s ease;
 }
 
+.partners11-toggle-wrap { text-align: center; margin-bottom: 2rem; }
+
+.partners11-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #2a9fdc;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.partners11-toggle:hover { background-color: #1e8bc3; transform: translateY(-2px); }
+
+.partners11-arrow { transition: transform 0.3s ease; }
+.partners11-toggle[aria-expanded="true"] .partners11-arrow { transform: rotate(180deg); }
+
+.partners11-content { overflow: hidden; height: 0; transition: height 0.6s ease; }
+
 @media (max-width: 768px) {
     .video-overlay {
         top: 58%;
