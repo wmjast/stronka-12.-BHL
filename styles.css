@@ -458,6 +458,11 @@ header img.logo {
   height: 320px;
 }
 
+.categories_partner {
+    width: 250px;
+    height: 200px; 
+}
+
 .event_partner {
     width: 200px;
     height: 160px; 
